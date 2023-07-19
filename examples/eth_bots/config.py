@@ -50,13 +50,13 @@ agent_config: list[BotInfo] = [
 environment_config = EnvironmentConfig(
     alchemy=False,
     artifacts_url="http://localhost:80",
-    delete_previous_logs=False,
+    delete_previous_logs=True,
     devnet=True,
-    halt_on_errors=True,
+    halt_on_errors=False,
     log_filename="agent0-bots",
     log_level=logging.INFO,
     log_stdout=True,
-    rpc_url="http://localhost:8545",
+    rpc_url="http://localhost:8546",
     random_seed=1234,
-    username="changeme",
+    username="Mihai",
 )
