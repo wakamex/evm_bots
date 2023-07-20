@@ -371,10 +371,14 @@ def get_wallet_from_trade_history(
     if tolerance is None:
         tolerance = MAXIMUM_BALANCE_MISMATCH_IN_WEI
     wallet = add_to_existing_wallet
-    if add_to_existing_wallet is None:
-        amount = FixedPoint(scaled_value=base_contract.balanceOf(address))
-        balance = types.Quantity(amount=amount, unit=types.TokenType.BASE)
-        wallet = Wallet(address=index, balance=balance)
+    if add_to_existing_wallet is None:  # we are not doing a marginal update
+        # create a fresh wallet with only our base balance in it
+        wallet = Wallet(
+            address=index,
+            balance=types.Quantity(
+                amount=FixedPoint(scaled_value=base_contract.balanceOf(address)), unit=types.TokenType.BASE
+            ),
+        )
     if trade_history is None:
         return wallet
     for position_id in trade_history["id"].unique():  # loop across all unique positions
@@ -384,9 +388,12 @@ def get_wallet_from_trade_history(
         logging.debug("found %s trades for %s in position %s", sum(relevant_trades), address[:8], position_id)
         positive_balance = int(trade_history.loc[relevant_trades & (to_agent), "value"].sum())
         negative_balance = int(trade_history.loc[relevant_trades & (from_agent), "value"].sum())
-        balance = positive_balance - negative_balance
+        calculated_balance = positive_balance - negative_balance
         logging.debug(
-            "balance %s = positive_balance %s - negative_balance %s", balance, positive_balance, negative_balance
+            "calculated_balance %s = positive_balance %s - negative_balance %s",
+            calculated_balance,
+            positive_balance,
+            negative_balance,
         )
         if "prefix" in trade_history.columns and len(trade_history.loc[relevant_trades, :]) > 0:
             asset_prefix = trade_history.loc[relevant_trades, "prefix"].iloc[0]
@@ -400,19 +407,27 @@ def get_wallet_from_trade_history(
         on_chain_balance = 0
         trades_df = trade_history.loc[relevant_trades, :]
         # verify our calculation against the onchain balance
+        # only do this if:
+        # - we're not doing a marginal update
+        # - the position we're looking at is not an LP position (position_id 0)
         if add_to_existing_wallet is None and position_id != 0:
             on_chain_balance = hyperdrive_contract.balanceOf(int(position_id), address)
-            # only do balance checks if not marignal update
-            if abs(balance - on_chain_balance) > tolerance:
+            if abs(calculated_balance - on_chain_balance) > tolerance:
                 raise ValueError(
-                    f"events {balance=} and {on_chain_balance=} disagree by more than {tolerance} wei for {address}"
+                    f"events {calculated_balance=} and {on_chain_balance=} disagree by more than {tolerance} wei for {address}"
                 )
-            logging.debug(" => calculated balance = on_chain = %s", format_utils.format_numeric_string(balance))
-        if balance != 0 or on_chain_balance != 0:  # check if there's an outstanding balance
+            logging.debug(
+                " => calculated balance = on_chain = %s", format_utils.format_numeric_string(calculated_balance)
+            )
+        # if there's a non-zero amount in our calculation, we continue
+        if calculated_balance != 0 or on_chain_balance != 0:
             if asset_type == "SHORT":
                 previous_balance = wallet.shorts[mint_time].balance if mint_time in wallet.shorts else 0
-                delta_balance = FixedPoint(scaled_value=int(round(previous_balance)))
+                logging.debug("previous_balance=%s", previous_balance)
+                delta_balance = FixedPoint(scaled_value=int(round(calculated_balance)))
+                logging.debug("delta_balance=%s", delta_balance)
                 new_balance = previous_balance + delta_balance
+                logging.debug("new_balance=%s", new_balance)
                 if new_balance == 0:
                     wallet.shorts.pop(mint_time, None)
                 else:  # we either do a marginal update or full weighted average for open share price
@@ -430,22 +445,25 @@ def get_wallet_from_trade_history(
                         value = trades_df["value"] * np.where(trades_df["from"] == address, -1, 1)
                         updated_open_share_price = np.average(trades_df["share_price"], weights=value)
                         updated_open_share_price = FixedPoint(scaled_value=int(round(updated_open_share_price)))
-                        if abs(balance - value.sum()) > tolerance:
+                        if abs(calculated_balance - value.sum()) > tolerance:
                             raise ValueError("weighted average open share price calculation is wrong")
                         logging.debug("calculated weighted average open share price of %s", updated_open_share_price)
                     wallet.shorts.update({mint_time: Short(new_balance, updated_open_share_price)})
                     logging.debug("storing in wallet as %s", {mint_time: Short(new_balance, updated_open_share_price)})
             elif asset_type == "LONG":
                 previous_balance = wallet.longs[mint_time].balance if mint_time in wallet.longs else 0
-                delta_balance = FixedPoint(scaled_value=int(round(previous_balance)))
+                logging.debug("previous_balance=%s", previous_balance)
+                delta_balance = FixedPoint(scaled_value=int(round(calculated_balance)))
+                logging.debug("delta_balance=%s", delta_balance)
                 new_balance = previous_balance + delta_balance
+                logging.debug("new_balance=%s", new_balance)
                 if new_balance == 0:  # remove empty position from wallet
                     wallet.longs.pop(mint_time, None)
                 else:  # update non-zero position in wallet
                     wallet.longs.update({mint_time: Long(balance=new_balance)})
-                logging.debug("storing in wallet as %s", {mint_time: Long(balance=balance)})
+                    logging.debug("storing in wallet as %s", {mint_time: Long(balance=calculated_balance)})
             elif asset_type == "LP":
-                wallet.lp_tokens += FixedPoint(scaled_value=balance)
+                wallet.lp_tokens += FixedPoint(scaled_value=calculated_balance)
     return wallet
 
 
