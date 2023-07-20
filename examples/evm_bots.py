@@ -9,6 +9,7 @@ import json
 import logging
 import os
 from datetime import datetime
+from http import HTTPStatus
 from pathlib import Path
 from time import sleep
 from time import time as now
@@ -70,7 +71,7 @@ def get_devnet_addresses(
             logging.info("\tAttempt %s out of %s to %s", attempt_num + 1, num_attempts, bot_config.artifacts_url)
             try:
                 response = requests.get(f"{bot_config.artifacts_url}/addresses.json", timeout=10)
-                if response.status_code == 200:
+                if response.status_code == HTTPStatus.OK:
                     deployed_addresses = response.json()
                     break
             except requests.exceptions.ConnectionError as exc:
