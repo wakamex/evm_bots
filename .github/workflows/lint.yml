@@ -36,10 +36,14 @@ jobs:
       - name: Run black
         run: python -m black --check --diff .
 
+      - name: Fetch main branch
+        run: |
+          git fetch origin main:main
+
       - name: Get changed Python files
         id: changed_files
         run: |
-          echo "::set-output name=files::$(git diff --name-only origin/main...HEAD | grep '.py$')"
+          echo "files=$(git diff --name-only main...HEAD | grep '.py$' | xargs)" >> $GITHUB_OUTPUT
 
       - name: Ruff on changed files
         run: |
