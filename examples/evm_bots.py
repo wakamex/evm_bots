@@ -45,6 +45,7 @@ from elfpy.markets.hyperdrive import HyperdriveMarket, HyperdrivePricingModel
 from elfpy.utils.format import format_numeric_string
 
 ape_logger.set_level(logging.ERROR)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def get_devnet_addresses(
