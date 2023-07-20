@@ -310,7 +310,7 @@ def main(
 if __name__ == "__main__":
     # setup constants
     CONTRACTS_URL = "http://localhost:80/addresses.json"
-    ETHEREUM_NODE = "http://localhost:8545"
+    ETHEREUM_NODE = "http://localhost:8546"
     ABI_DIR = "./hyperdrive_solidity/.build/"
     START_BLOCK = 0
     # Look back limit for backfilling
